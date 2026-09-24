@@ -3,8 +3,9 @@
 # install.sh — bootstrap a dev box for Claude Code work.
 #
 # Single-file, self-contained: upload just this file to a server and run
-# it. Core install steps (apt, gh, NVM/Node, Claude Code CLI) need nothing
-# else. The one extra resource (starter CLAUDE.md template) is pulled at
+# it. Auto-detects the package manager (apt, dnf, yum, apk, or brew) so it
+# works across Ubuntu/Debian, RHEL/CentOS/Fedora/Amazon Linux, Alpine, and
+# macOS. The one extra resource (starter CLAUDE.md template) is pulled at
 # runtime from https://github.com/imwebdev/claude-installer — nothing else
 # needs to be uploaded alongside this script.
 #
@@ -64,42 +65,126 @@ done
 echo "🚀 Claude Code dev box setup"
 echo ""
 
-# ---------- 1. OS check ----------
-if ! command -v apt >/dev/null 2>&1; then
-    print_error "This script targets apt-based distros (Ubuntu/Debian). apt not found."
+# ---------- 1. OS / package manager detection ----------
+if command -v apt-get >/dev/null 2>&1; then
+    PKG_MGR=apt
+elif command -v dnf >/dev/null 2>&1; then
+    PKG_MGR=dnf
+elif command -v yum >/dev/null 2>&1; then
+    PKG_MGR=yum
+elif command -v apk >/dev/null 2>&1; then
+    PKG_MGR=apk
+elif command -v brew >/dev/null 2>&1; then
+    PKG_MGR=brew
+else
+    print_error "No supported package manager found (apt, dnf, yum, apk, brew)."
     exit 1
 fi
-OS_DESC="$(lsb_release -d 2>/dev/null | cut -f2 || echo 'unknown apt-based distro')"
-print_status "📍 Detected: $OS_DESC"
 
-# ---------- 2. apt base deps ----------
-print_status "📦 Updating apt and installing base dependencies..."
-sudo apt update
-sudo apt install -y build-essential curl git wget ca-certificates gnupg lsb-release unzip
+if [ -f /etc/os-release ]; then
+    OS_DESC="$(. /etc/os-release && echo "${PRETTY_NAME:-$NAME}")"
+elif [ "$PKG_MGR" = brew ]; then
+    OS_DESC="macOS $(sw_vers -productVersion 2>/dev/null || true)"
+else
+    OS_DESC="$(uname -srm)"
+fi
+print_status "📍 Detected: $OS_DESC (package manager: $PKG_MGR)"
+
+SUDO=""
+if [ "$PKG_MGR" != brew ] && [ "$(id -u)" -ne 0 ]; then
+    command -v sudo >/dev/null 2>&1 && SUDO="sudo"
+fi
+
+# ---------- 2. base deps ----------
+print_status "📦 Installing base dependencies..."
+case "$PKG_MGR" in
+    apt)
+        $SUDO apt-get update
+        $SUDO apt-get install -y build-essential curl git wget ca-certificates gnupg lsb-release unzip
+        ;;
+    dnf)
+        $SUDO dnf groupinstall -y "Development Tools" 2>/dev/null || $SUDO dnf install -y gcc gcc-c++ make
+        $SUDO dnf install -y curl git wget ca-certificates gnupg2 unzip
+        ;;
+    yum)
+        $SUDO yum groupinstall -y "Development Tools" 2>/dev/null || $SUDO yum install -y gcc gcc-c++ make
+        $SUDO yum install -y curl git wget ca-certificates gnupg2 unzip
+        ;;
+    apk)
+        $SUDO apk add --no-cache build-base curl git wget ca-certificates gnupg unzip bash
+        ;;
+    brew)
+        command -v brew >/dev/null 2>&1 || { print_error "brew not found — install Homebrew first."; exit 1; }
+        brew install curl git wget gnupg
+        ;;
+esac
 print_success "Base dependencies installed"
 
 # ---------- 3. extras: gh, ripgrep, fd, jq ----------
 if [ "$SKIP_EXTRAS" = false ]; then
-    print_status "🧰 Installing extras (gh, ripgrep, fd-find, jq)..."
+    print_status "🧰 Installing extras (gh, ripgrep, fd, jq)..."
 
     if ! command -v gh >/dev/null 2>&1 || [ "$FORCE" = true ]; then
-        if [ ! -f /etc/apt/keyrings/githubcli-archive-keyring.gpg ]; then
-            sudo mkdir -p -m 755 /etc/apt/keyrings
-            curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-                | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
-            sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-            echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-                | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null
-            sudo apt update
-        fi
-        sudo apt install -y gh
-        print_success "gh CLI installed ($(gh --version | head -1))"
+        case "$PKG_MGR" in
+            apt)
+                if [ ! -f /etc/apt/keyrings/githubcli-archive-keyring.gpg ]; then
+                    $SUDO mkdir -p -m 755 /etc/apt/keyrings
+                    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+                        | $SUDO tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
+                    $SUDO chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+                    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+                        | $SUDO tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+                    $SUDO apt-get update
+                fi
+                $SUDO apt-get install -y gh
+                ;;
+            dnf)
+                $SUDO dnf install -y dnf-plugins-core 2>/dev/null || true
+                $SUDO dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
+                $SUDO dnf install -y gh
+                ;;
+            yum)
+                $SUDO yum install -y yum-utils 2>/dev/null || true
+                $SUDO yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
+                $SUDO yum install -y gh
+                ;;
+            apk)
+                $SUDO apk add --no-cache github-cli 2>/dev/null \
+                    || print_warning "gh not available in apk repos on this Alpine version, skipping"
+                ;;
+            brew)
+                brew install gh
+                ;;
+        esac
+        command -v gh >/dev/null 2>&1 && print_success "gh CLI installed ($(gh --version | head -1))"
     else
         print_success "gh CLI already present ($(gh --version | head -1))"
     fi
 
-    sudo apt install -y ripgrep fd-find jq
-    print_success "ripgrep, fd-find, jq installed"
+    case "$PKG_MGR" in
+        apt)
+            $SUDO apt-get install -y ripgrep fd-find jq
+            ;;
+        dnf)
+            $SUDO dnf install -y epel-release 2>/dev/null || true
+            $SUDO dnf install -y ripgrep jq
+            $SUDO dnf install -y fd-find 2>/dev/null || $SUDO dnf install -y fd 2>/dev/null \
+                || print_warning "fd not available in enabled repos, skipping"
+            ;;
+        yum)
+            $SUDO yum install -y epel-release 2>/dev/null || true
+            $SUDO yum install -y ripgrep jq
+            $SUDO yum install -y fd-find 2>/dev/null || $SUDO yum install -y fd 2>/dev/null \
+                || print_warning "fd not available in enabled repos, skipping"
+            ;;
+        apk)
+            $SUDO apk add --no-cache ripgrep fd jq
+            ;;
+        brew)
+            brew install ripgrep fd jq
+            ;;
+    esac
+    print_success "ripgrep, fd, jq installed (where available)"
 else
     print_warning "Skipping extras (--skip-extras)"
 fi
@@ -141,7 +226,10 @@ if [ "$SKIP_NODE" = false ]; then
     print_success "npm updated to $(npm --version)"
 
     # idempotent shell profile block
-    PROFILE_FILE="$HOME/.bashrc"
+    case "${SHELL:-}" in
+        */zsh) PROFILE_FILE="$HOME/.zshrc" ;;
+        *) PROFILE_FILE="$HOME/.bashrc" ;;
+    esac
     if ! grep -q '# NVM Configuration' "$PROFILE_FILE" 2>/dev/null; then
         {
             echo ""

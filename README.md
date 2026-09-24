@@ -1,6 +1,11 @@
 # claude-installer
 
-Bootstrap a fresh Ubuntu/Debian server for Claude Code work: apt build deps, `gh` CLI, NVM + Node LTS, and the Claude Code CLI itself. Single self-contained script — nothing else needs to be uploaded.
+Bootstrap a fresh server for Claude Code work: build deps, `gh` CLI, NVM + Node LTS, and the Claude Code CLI itself. Single self-contained script — nothing else needs to be uploaded. Auto-detects the package manager, so the same script works on:
+
+- Ubuntu/Debian (`apt`)
+- RHEL/CentOS/Fedora/Amazon Linux (`dnf` or `yum`)
+- Alpine (`apk`)
+- macOS (`brew`)
 
 ## Run it on a server
 
