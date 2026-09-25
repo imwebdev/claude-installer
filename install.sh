@@ -104,14 +104,18 @@ case "$PKG_MGR" in
         ;;
     dnf)
         $SUDO dnf groupinstall -y "Development Tools" 2>/dev/null || $SUDO dnf install -y gcc gcc-c++ make
-        $SUDO dnf install -y curl git wget ca-certificates unzip
-        # Amazon Linux 2023 ships gnupg2-minimal by default, which conflicts
-        # with the full gnupg2 package — only pull it in if gpg is missing.
+        $SUDO dnf install -y git wget ca-certificates unzip
+        # Amazon Linux 2023 ships "-minimal" variants (curl-minimal,
+        # gnupg2-minimal) by default, which package-conflict with the full
+        # curl/gnupg2. The minimal builds already satisfy this script's
+        # needs, so only pull the full package in if the binary is missing.
+        command -v curl >/dev/null 2>&1 || $SUDO dnf install -y curl --allowerasing 2>/dev/null || true
         command -v gpg >/dev/null 2>&1 || $SUDO dnf install -y gnupg2 --allowerasing 2>/dev/null || true
         ;;
     yum)
         $SUDO yum groupinstall -y "Development Tools" 2>/dev/null || $SUDO yum install -y gcc gcc-c++ make
-        $SUDO yum install -y curl git wget ca-certificates unzip
+        $SUDO yum install -y git wget ca-certificates unzip
+        command -v curl >/dev/null 2>&1 || $SUDO yum install -y curl 2>/dev/null || true
         command -v gpg >/dev/null 2>&1 || $SUDO yum install -y gnupg2 2>/dev/null || true
         ;;
     apk)
