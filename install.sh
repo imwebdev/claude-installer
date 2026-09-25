@@ -227,6 +227,9 @@ if [ "$SKIP_NODE" = false ]; then
         print_success "NVM already installed, skipping (use --force to reinstall)"
     fi
 
+    # nvm's own shell functions aren't nounset-safe (e.g. reference
+    # PROVIDED_VERSION without a default), so drop -u while it runs.
+    set +u
     # shellcheck disable=SC1091
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
     [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
@@ -235,6 +238,7 @@ if [ "$SKIP_NODE" = false ]; then
     nvm install --lts
     nvm alias default 'lts/*'
     nvm use --lts
+    set -u
 
     NODE_VERSION=$(node --version)
     NPM_VERSION=$(npm --version)
