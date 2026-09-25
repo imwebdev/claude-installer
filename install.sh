@@ -169,27 +169,38 @@ if [ "$SKIP_EXTRAS" = false ]; then
         print_success "gh CLI already present ($(gh --version | head -1))"
     fi
 
+    # Each of these is a nice-to-have — none may abort the script if its
+    # distro's repos don't carry it (e.g. Amazon Linux 2023 has no EPEL
+    # and no ripgrep package at all).
     case "$PKG_MGR" in
         apt)
-            $SUDO apt-get install -y ripgrep fd-find jq
+            $SUDO apt-get install -y jq 2>/dev/null || print_warning "jq not available, skipping"
+            $SUDO apt-get install -y ripgrep 2>/dev/null || print_warning "ripgrep not available, skipping"
+            $SUDO apt-get install -y fd-find 2>/dev/null || print_warning "fd not available, skipping"
             ;;
         dnf)
             $SUDO dnf install -y epel-release 2>/dev/null || true
-            $SUDO dnf install -y ripgrep jq
+            $SUDO dnf install -y jq 2>/dev/null || print_warning "jq not available, skipping"
+            $SUDO dnf install -y ripgrep 2>/dev/null || print_warning "ripgrep not available in enabled repos, skipping"
             $SUDO dnf install -y fd-find 2>/dev/null || $SUDO dnf install -y fd 2>/dev/null \
                 || print_warning "fd not available in enabled repos, skipping"
             ;;
         yum)
             $SUDO yum install -y epel-release 2>/dev/null || true
-            $SUDO yum install -y ripgrep jq
+            $SUDO yum install -y jq 2>/dev/null || print_warning "jq not available, skipping"
+            $SUDO yum install -y ripgrep 2>/dev/null || print_warning "ripgrep not available in enabled repos, skipping"
             $SUDO yum install -y fd-find 2>/dev/null || $SUDO yum install -y fd 2>/dev/null \
                 || print_warning "fd not available in enabled repos, skipping"
             ;;
         apk)
-            $SUDO apk add --no-cache ripgrep fd jq
+            $SUDO apk add --no-cache jq 2>/dev/null || print_warning "jq not available, skipping"
+            $SUDO apk add --no-cache ripgrep 2>/dev/null || print_warning "ripgrep not available, skipping"
+            $SUDO apk add --no-cache fd 2>/dev/null || print_warning "fd not available, skipping"
             ;;
         brew)
-            brew install ripgrep fd jq
+            brew install jq 2>/dev/null || print_warning "jq not available, skipping"
+            brew install ripgrep 2>/dev/null || print_warning "ripgrep not available, skipping"
+            brew install fd 2>/dev/null || print_warning "fd not available, skipping"
             ;;
     esac
     print_success "ripgrep, fd, jq installed (where available)"
