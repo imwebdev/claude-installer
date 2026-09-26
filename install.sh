@@ -292,6 +292,22 @@ if [ "$SKIP_CLAUDE" = false ]; then
     # Ensure PATH picks up a fresh install in this shell before verifying.
     export PATH="$HOME/.local/bin:$PATH"
 
+    # Persist it too. The native installer doesn't reliably add ~/.local/bin
+    # to the shell profile itself, which otherwise leaves `claude` unreachable
+    # in any new shell/session once this script's own process exits.
+    case "${SHELL:-}" in
+        */zsh) CLAUDE_PROFILE_FILE="$HOME/.zshrc" ;;
+        *) CLAUDE_PROFILE_FILE="$HOME/.bashrc" ;;
+    esac
+    if [ -d "$HOME/.local/bin" ] && ! grep -q '# Claude Code CLI PATH' "$CLAUDE_PROFILE_FILE" 2>/dev/null; then
+        {
+            echo ""
+            echo "# Claude Code CLI PATH"
+            echo 'export PATH="$HOME/.local/bin:$PATH"'
+        } >> "$CLAUDE_PROFILE_FILE"
+        print_success "PATH block added to $CLAUDE_PROFILE_FILE"
+    fi
+
     if command -v claude >/dev/null 2>&1; then
         print_success "Claude CLI found: $(claude --version 2>/dev/null || echo 'installed')"
         claude migrate-installer 2>/dev/null || true
